@@ -70,3 +70,28 @@ claude mcp add --scope user team-inbox -- \
 
 (same shape for `transcript-reader` and `big-read`). `uv run --project` resolves each
 server's own lockfile — no shared venv, no version skew between servers.
+
+### One process for all sessions (streamable HTTP)
+
+Claude Code starts every stdio server once per session, and a `uv run` wrapper doubles
+that: with four servers, each session costs eight processes and ~300 MB. On a box that
+keeps thirty sessions alive that was 248 processes and 4 GB. Claude Code has no built-in
+way to share a stdio server between sessions (the feature request was auto-closed), but
+a server it reaches over HTTP is naturally shared — so `serve_http.py` runs any server
+here over streamable HTTP on loopback, and `install_http.sh` turns that into one
+always-on systemd user unit per server and re-points the user-scope config:
+
+```bash
+~/.claude/mcp/install_http.sh      # idempotent; re-run after pulling to restart units
+systemctl --user status 'claude-mcp@*'
+journalctl --user -u claude-mcp@team-inbox -f
+```
+
+Ports are fixed in the `SERVERS` registry at the top of `serve_http.py` (8871–8874).
+Servers run in stateless mode, so a unit restart never leaves clients holding a dead
+session id. Tool names don't change (`mcp__team-inbox__fetch_unread` etc.), so
+permission rules and hook matchers keep working. Sessions that were already running
+keep their stdio copies until they restart. `loginctl enable-linger $USER` keeps the
+units up when you're logged out. Safe because every server here is stateless with
+respect to the caller: tools take explicit arguments and never read the session's
+environment or cwd — keep it that way if you add one.

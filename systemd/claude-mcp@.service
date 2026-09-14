@@ -1,0 +1,15 @@
+[Unit]
+Description=Claude Code MCP server (%i) over streamable HTTP on loopback
+Documentation=https://github.com/Butanium/custom-claude-mcps
+After=network.target
+
+[Service]
+Type=simple
+ExecStart=/usr/bin/python3 %h/.claude/mcp/serve_http.py %i
+WorkingDirectory=%h/.claude/mcp
+Environment=PATH=%h/.local/bin:/usr/local/bin:/usr/bin:/bin
+Restart=always
+RestartSec=2
+
+[Install]
+WantedBy=default.target
