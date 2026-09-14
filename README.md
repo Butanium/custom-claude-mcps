@@ -92,6 +92,7 @@ Servers run in stateless mode, so a unit restart never leaves clients holding a 
 session id. Tool names don't change (`mcp__team-inbox__fetch_unread` etc.), so
 permission rules and hook matchers keep working. Sessions that were already running
 keep their stdio copies until they restart. `loginctl enable-linger $USER` keeps the
-units up when you're logged out. Safe because every server here is stateless with
+units up when you're logged out. Units don't read your shell profile; host-specific
+environment for them (a `UV_LINK_MODE`, say) goes in `~/.config/claude-mcp.env`. Safe because every server here is stateless with
 respect to the caller: tools take explicit arguments and never read the session's
 environment or cwd — keep it that way if you add one.

@@ -8,6 +8,8 @@ Type=simple
 ExecStart=/usr/bin/python3 %h/.claude/mcp/serve_http.py %i
 WorkingDirectory=%h/.claude/mcp
 Environment=PATH=%h/.local/bin:/usr/local/bin:/usr/bin:/bin
+# Optional host-specific overrides (e.g. UV_LINK_MODE); units don't read the shell profile.
+EnvironmentFile=-%h/.config/claude-mcp.env
 Restart=always
 RestartSec=2
 

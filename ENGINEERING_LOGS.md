@@ -38,6 +38,8 @@ processes and ~4.2 GB resident. HTTP servers are shared by construction.
 `claude -p --allowedTools mcp__big-read__read` session read a file through the shared
 unit (the unit's journal shows the `CallToolRequest`) with no permission denials.
 
-**Gotcha.** `uv run` inside the unit honours `~/.config/uv/uv.toml`, not the shell's
-env — on a host that relies on `UV_LINK_MODE=symlink` from `.bashrc`, put
-`link-mode = "symlink"` in `uv.toml` too or the first sync from the unit copies files.
+**Gotcha.** Units don't source the shell profile, so a host that sets uv options in
+`.bashrc` (e.g. `UV_LINK_MODE=symlink`) must repeat them for the units. The unit reads
+`~/.config/claude-mcp.env` if present for exactly this; first attempt put
+`link-mode = "symlink"` in the global `uv.toml`, reverted because it changed uv's
+behaviour for every non-shell context on the host to fix one.
