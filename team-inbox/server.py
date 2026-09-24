@@ -1,4 +1,4 @@
-"""MCP server that reads pending messages from Claude Code Agent-Teams inboxes."""
+"""MCP server for Claude Code Agent-Teams inboxes: pending messages, member status, broadcast."""
 
 from __future__ import annotations
 
@@ -15,6 +15,7 @@ from inbox_state import (
     pending_from_paths,
     read_inbox,
 )
+from inbox_write import InboxWriteError, append_message, iso_now
 from member_status import member_status_report
 
 mcp = FastMCP("team-inbox")
@@ -125,6 +126,58 @@ def fetch_unread(
         )
 
     return formatted
+
+
+@mcp.tool()
+def broadcast(team_name: str, sender: str, message: str, summary: str | None = None) -> str:
+    """Send one message to every member of a team except the sender.
+
+    SendMessage no longer accepts `to: "*"`; this restores the broadcast. Each
+    recipient gets an ordinary teammate message from `sender` in its inbox, the
+    same entry SendMessage would write, and sees it on its next inbox poll.
+
+    Args:
+        team_name: Name of the team (directory under `~/.claude/teams/`), e.g.
+            `session-<first 8 chars of the lead's session id>`.
+        sender: Your own name in the team ("team-lead" for the lead). It is
+            what recipients see as the sender, and it is skipped as a recipient.
+        message: Plain-text message body.
+        summary: Optional 5-10 word preview, as in SendMessage.
+
+    Returns:
+        Who it was delivered to, and any recipient whose inbox write failed.
+    """
+    config = find_team_config(team_name)
+    if config is None:
+        return f"Error: team config not found for '{team_name}'."
+    members = [m for m in config.get("members", []) if m.get("name")]
+    names = [m["name"] for m in members]
+    if sender not in names:
+        return f"Error: '{sender}' is not a member of '{team_name}'. Members: {', '.join(names)}."
+    if not message.strip():
+        return "Error: empty message."
+    color = next((m.get("color") for m in members if m["name"] == sender), None)
+
+    delivered, failed = [], []
+    for name in names:
+        if name == sender:
+            continue
+        entry = {"from": sender, "text": message}
+        if summary:
+            entry["summary"] = summary
+        entry["timestamp"] = iso_now()
+        if color:
+            entry["color"] = color
+        try:
+            append_message(team_name, name, entry)
+            delivered.append(name)
+        except (InboxWriteError, OSError) as e:
+            failed.append(f"{name} ({e})")
+
+    out = f"Delivered to {', '.join(delivered) or 'nobody'}."
+    if failed:
+        out += f" Failed: {'; '.join(failed)}."
+    return out
 
 
 @mcp.tool()

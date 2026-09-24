@@ -15,7 +15,7 @@ external state. Python ≥ 3.10.
 
 ### `team-inbox` — honest mail state for Agent-Teams
 
-Two tools for leads (and teammates) running Claude Code Agent Teams:
+Three tools for leads (and teammates) running Claude Code Agent Teams:
 
 - **`fetch_unread`** — messages in a team inbox that the recipient has *genuinely not
   seen*. The inbox file's `read` flag is flipped at queue time, not delivery time, so it
@@ -28,6 +28,12 @@ Two tools for leads (and teammates) running Claude Code Agent Teams:
   direction exists because "idle" reads as "nothing to say" when it can mean "replied,
   and the reply hasn't reached you": we once watched a lead shutdown-request a reviewer
   whose findings sat undelivered in the lead's own inbox.
+- **`broadcast`** — one message to every team member except the sender. `SendMessage`
+  used to accept `to: "*"`; 2.1.280 rejects it and has no fan-out code left. This writes
+  the same inbox entry `SendMessage` would (`inbox_write.py`: the CLI's
+  `proper-lockfile` lock directory, entry shape, atomic 2-space JSON) into each
+  recipient's inbox file, and recipients pick it up on their next poll, idle or not.
+  The sender names itself (`sender`), since one shared server can't tell who is calling.
 
 `inbox_state.py` (transcript-as-truth pending-mail resolution) is also imported by
 `pending_message_guard.py` in the hooks repo, which *blocks* a `SendMessage` — including

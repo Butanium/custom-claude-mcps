@@ -2,6 +2,34 @@
 
 Append-only. What changed and why; the README says how things work now.
 
+## 2026-09-23 — team-inbox `broadcast`
+
+**What changed.** New `broadcast(team_name, sender, message, summary)` tool and
+`inbox_write.py`, which appends an entry to a member's inbox file the way the CLI's
+`writeToMailbox` does.
+
+**Why.** `SendMessage` in 2.1.280 rejects `to: "*"` ("broadcast … is no longer
+supported — send a message per recipient") and the delivery code behind that check
+resolves one name and writes one inbox; there is no fan-out left to re-enable with a
+binary patch. Writing the inbox files ourselves needs no patch.
+
+**How it matches the CLI (2.1.280, `chunk-kc5318jd.js` `writeToMailbox`).** Exclusive
+create of `[]` if the inbox is missing; `proper-lockfile` with
+`lockfilePath: <inbox>.lock` (a mkdir lock; stale after 10 s); re-read, push
+`{from, text, summary, timestamp, color, msgV: 1, msg_id: <uuid>, type: "message",
+read: false}`; atomic write, `JSON.stringify(…, null, 2)`. The CLI's in-memory record
+of the entry is the sender's bookkeeping, which recipients don't read.
+
+**Verified.** Haiku lead + two tmux teammates idle at the prompt; the lead called
+`broadcast` through the MCP; both woke, received an ordinary
+`<teammate-message teammate_id="team-lead" summary="…">`, and replied via
+`SendMessage`.
+
+**Known risk.** The CLI has a second mailbox backend behind a flag (`N()` /
+`storageV5` in `writeToMailbox`). If that becomes the default, inbox files stop being
+read and `broadcast` will still report "Delivered". Re-run the check above after a
+claude update that touches teams.
+
 ## 2026-09-14 — serve every server over streamable HTTP as one shared process
 
 **What changed.** `serve_http.py` (registry of name → project dir, module, loopback
