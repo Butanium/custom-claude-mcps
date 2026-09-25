@@ -67,10 +67,27 @@ def find_transcript(session_id: str) -> Path | None:
 def _encode_cwd(cwd: str) -> str:
     """Encode an absolute cwd to the form used as a project dir name.
 
-    Claude Code converts both `/` and `.` to `-`. Example:
-    `/home/user/.claude` -> `-home-user--claude`.
+    Mirrors Claude Code: every non-alphanumeric UTF-16 code unit becomes `-`
+    (`/home/user/.claude` -> `-home-user--claude`), and a result over 200
+    chars is cut to 200 plus `-<base36 of |Java-style 32-bit hash of cwd|>`.
     """
-    return "".join("-" if c in "/." else c for c in cwd)
+    units = cwd.encode("utf-16-le")
+    codes = [int.from_bytes(units[i:i + 2], "little") for i in range(0, len(units), 2)]
+    slug = "".join(chr(c) if chr(c).isascii() and chr(c).isalnum() else "-" for c in codes)
+    if len(slug) <= 200:
+        return slug
+    h = 0
+    for c in codes:
+        h = ((h << 5) - h + c) & 0xFFFFFFFF
+    h = abs(h - (1 << 32) if h >= 1 << 31 else h)
+    digits = "0123456789abcdefghijklmnopqrstuvwxyz"
+    b36 = ""
+    while True:
+        h, r = divmod(h, 36)
+        b36 = digits[r] + b36
+        if h == 0:
+            break
+    return f"{slug[:200]}-{b36}"
 
 
 def _first_lead_message(transcript_path: Path, start: int = 0) -> str | None:
