@@ -73,16 +73,19 @@ def _encode_cwd(cwd: str) -> str:
     return "".join("-" if c in "/." else c for c in cwd)
 
 
-def _first_lead_message(transcript_path: Path) -> str | None:
+def _first_lead_message(transcript_path: Path, start: int = 0) -> str | None:
     """Inner text of the first `<teammate-message teammate_id="team-lead">` block.
 
-    Scans the first ~50 lines of the JSONL — the spawn prompt arrives near
-    the top of every teammate's transcript.
+    Scans ~50 lines of the JSONL from line `start` — the spawn prompt arrives
+    near the top of every teammate's transcript, or right after the inherited
+    history for a forked teammate.
     """
     try:
         with transcript_path.open() as f:
             for i, line in enumerate(f):
-                if i > 50:
+                if i < start:
+                    continue
+                if i > start + 50:
                     return None
                 try:
                     entry = json.loads(line)
@@ -100,6 +103,27 @@ def _first_lead_message(transcript_path: Path) -> str | None:
                         return m.group(2)
     except OSError:
         return None
+    return None
+
+
+def _fork_teammate_transcript(team_name: str, member_name: str, prompt: str) -> Path | None:
+    """Transcript of a teammate forked from the lead's context, via the sidecar
+    the fork-teammate launcher writes (`teams/<team>/fork-teammates/<name>.json`).
+
+    A fork's transcript opens with the lead's whole history, so its spawn prompt
+    sits at line `forkLine`, not near the top. Matching the prompt there keeps a
+    stale sidecar from shadowing a later non-fork teammate of the same name.
+    """
+    sidecar = TEAMS_ROOT / team_name / "fork-teammates" / f"{member_name}.json"
+    try:
+        info = json.loads(sidecar.read_text())
+        transcript = Path(info["transcript"])
+        start = int(info["forkLine"])
+    except (OSError, json.JSONDecodeError, KeyError, TypeError, ValueError):
+        return None
+    first = _first_lead_message(transcript, start=start)
+    if first is not None and first.strip() == prompt:
+        return transcript
     return None
 
 
@@ -128,10 +152,13 @@ def find_member_transcript(team_name: str, member_name: str) -> Path | None:
     prompt = member.get("prompt")
     if not cwd or not prompt:
         return None
+    target = prompt.strip()
+    fork = _fork_teammate_transcript(team_name, member_name, target)
+    if fork is not None:
+        return fork
     project_dir = PROJECTS_ROOT / _encode_cwd(cwd)
     if not project_dir.exists():
         return None
-    target = prompt.strip()
     for jsonl in project_dir.glob("*.jsonl"):
         first = _first_lead_message(jsonl)
         if first is not None and first.strip() == target:
