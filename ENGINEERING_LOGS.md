@@ -2,6 +2,45 @@
 
 Append-only. What changed and why; the README says how things work now.
 
+## 2026-09-26 — team-inbox `teammate_status`: working/idle from the transcript
+
+**What changed.** New `turn_state.py`: the last conversation row of a transcript says
+whether the turn is open (tool_use awaiting a result, a message with no reply) or over
+(assistant stop_reason other than tool_use/pause_turn/null, API-error row, user
+interrupt). The `status:` headline now comes from it and names its source; the pane
+title is a secondary line, and the headline source only when no transcript is found.
+Same rule as itls's `_closes_turn`, ported rather than imported (itls is a separate,
+private repo), plus rows itls doesn't step over: compaction summaries (after a manual
+`/compact` at the prompt, itls reads the summary row as an open turn), local-command and
+bash-mode rows (`<command-name>`, `<local-command-stdout>`, `<bash-input>`: typed at the
+prompt, no reply follows), and sidechain rows, which count only in a
+`subagents/agent-*.jsonl` file (every row there is a sidechain row).
+
+**Why.** Pane title and registry `busy` both count background work as working: a
+Claude Code 2.1.197 session kept a braille spinner frame in its title for weeks while
+sitting at its prompt with a Monitor armed.
+
+**Also fixed while verifying on a live team.**
+- Every tmux teammate printed `pane: unknown`: teammates live on a per-lead tmux server
+  (`/tmp/tmux-<uid>/claude-swarm-<lead pid>`), and the old code queried the default
+  server, where `display-message -t %N` for a missing pane prints nothing with rc 0.
+  The socket now comes from the member process's `TMUX` env var (process found in
+  /proc by `--agent-name`/`--team-name`), and a pane whose `#{pane_id}` doesn't echo back
+  is "gone". On 2.1.280 swarm panes all carry the lead's session title with an idle
+  glyph, even mid-turn, so the pane line mostly shows that the pane exists.
+- A tmux member with no live process reads "not running" instead of whatever its
+  transcript last said.
+- The lead's transcript was "not found" when the lead had resumed into a forked
+  session: `leadSessionId` keeps the id from team creation. Teammates'
+  `--parent-session-id` gives the live one.
+- In-process teammates (`tmuxPaneId: "in-process"`) are found through
+  `<lead session>/subagents/agent-*.meta.json` (`teamName` + `name`), get no pane lookup,
+  and `member` also accepts a subagent the lead spawned with `Agent(name=...)`.
+
+**Tests.** `tests/test_turn_state.py` over fixtures made by
+`tests/fixtures/turn_state/make_fixtures.py`; `tests/test_member_status_turn.py` builds a
+throwaway team with patched roots.
+
 ## 2026-09-23 — team-inbox `broadcast`
 
 **What changed.** New `broadcast(team_name, sender, message, summary)` tool and

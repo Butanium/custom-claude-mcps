@@ -21,8 +21,12 @@ Three tools for leads (and teammates) running Claude Code Agent Teams:
   seen*. The inbox file's `read` flag is flipped at queue time, not delivery time, so it
   lies; this parses the recipient's JSONL transcript instead — a `<teammate-message>`
   block in the transcript is the only honest "delivered" signal. Works mid-turn.
-- **`teammate_status`** — is a teammate working, idle, or stalled, without pinging them:
-  tmux pane title, in-flight background work (from the hooks repo's `inflight_tracker`
+- **`teammate_status`** — is a teammate working, idle, or stalled, without pinging them.
+  Working/idle comes from the transcript's last conversation row (a tool call awaiting
+  its result = working, an assistant row with a final stop reason = idle), so a
+  teammate at its prompt with a Monitor armed reads as "idle, background work in
+  flight", not working. Also: tmux pane title (secondary), whether the member's process
+  is alive, in-flight background work (from the hooks repo's `inflight_tracker`
   state, if present), transcript mtime, and undelivered mail in **both directions** —
   messages addressed to them, and messages they sent that nobody has seen yet. The second
   direction exists because "idle" reads as "nothing to say" when it can mean "replied,

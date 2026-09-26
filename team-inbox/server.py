@@ -189,8 +189,16 @@ def teammate_status(team_name: str, member: str | None = None) -> str:
     idle notification arrives for a member whose task is still in_progress,
     or before assigning new work.
 
-    Signals (all read-only): tmux pane title (working = mid-turn spinner /
-    idle = at prompt), the member's in-flight background tasks from the
+    The `status:` headline comes from the member's transcript and names its
+    source: "working" = turn open (names the tool calls still awaiting a
+    result, or "model generating"; "silent" after 30 min without a row =
+    long tool call or hung), "idle" = turn ended (stop reason and age),
+    "idle, background work in flight" = at the prompt with a Monitor / bg
+    job running, "not running" = no live process for a tmux member. Without
+    a transcript it falls back to the tmux pane title.
+
+    Other signals (all read-only): tmux pane title (secondary; spinner glyph
+    = mid-turn), the member's in-flight background tasks from the
     inflight-tracker hook state (bash commands, agents, monitors, crons,
     with output-file start/last-write ages), transcript mtime (last
     activity of any kind), and undelivered inbox messages in BOTH directions:
@@ -199,12 +207,14 @@ def teammate_status(team_name: str, member: str | None = None) -> str:
     "replied, and you haven't seen it yet", not "nothing left to say".
 
     Caveats: a member sleeping on a ScheduleWakeup timer shows as idle with
-    no background work (wakeups live in-process only); pane state is a
-    heuristic read of the title glyph.
+    no background work (wakeups live in-process only); a tool call waiting
+    on a permission prompt reads as "working".
 
     Args:
         team_name: Name of the team (directory under `~/.claude/teams/`).
         member: One member's name, or None for all members (lead included).
+            Also accepts the name of a subagent the lead spawned with
+            `Agent(name=...)` outside the team.
 
     Returns:
         One formatted block per member.

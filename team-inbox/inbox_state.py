@@ -152,6 +152,8 @@ def find_member_transcript(team_name: str, member_name: str) -> Path | None:
     the teammate's transcript as the first `<teammate-message
     teammate_id="team-lead">` block. We glob the project dir for the
     member's cwd and return the JSONL whose first such block matches.
+    In-process teammates write under the lead's session dir instead (see
+    `_in_process_teammate_transcript`).
 
     Returns None if the team config lacks the `prompt` field (older config
     shape) or no matching transcript is found.
@@ -170,10 +172,12 @@ def find_member_transcript(team_name: str, member_name: str) -> Path | None:
     if not cwd or not prompt:
         return None
     target = prompt.strip()
+    project_dir = PROJECTS_ROOT / _encode_cwd(cwd)
+    if member.get("backendType") == "in-process":
+        return _in_process_teammate_transcript(project_dir, team_name, member_name, target)
     fork = _fork_teammate_transcript(team_name, member_name, target)
     if fork is not None:
         return fork
-    project_dir = PROJECTS_ROOT / _encode_cwd(cwd)
     if not project_dir.exists():
         return None
     for jsonl in project_dir.glob("*.jsonl"):
@@ -181,6 +185,49 @@ def find_member_transcript(team_name: str, member_name: str) -> Path | None:
         if first is not None and first.strip() == target:
             return jsonl
     return None
+
+
+def _subagent_metas(project_dir: Path, session_ids: list[str] | None = None):
+    """(transcript, meta) for each `<session>/subagents/agent-*.jsonl` under
+    `project_dir`, restricted to `session_ids` when given."""
+    dirs = (
+        [project_dir / s / "subagents" for s in session_ids]
+        if session_ids is not None
+        else project_dir.glob("*/subagents")
+    )
+    for d in dirs:
+        for meta_path in d.glob("agent-*.meta.json"):
+            try:
+                meta = json.loads(meta_path.read_text())
+            except (OSError, json.JSONDecodeError):
+                continue
+            transcript = meta_path.with_name(meta_path.name.removesuffix(".meta.json") + ".jsonl")
+            if isinstance(meta, dict) and transcript.exists():
+                yield transcript, meta
+
+
+def _in_process_teammate_transcript(
+    project_dir: Path, team_name: str, member_name: str, prompt: str
+) -> Path | None:
+    """An in-process teammate writes a subagent-format transcript under the
+    lead's session dir, with teamName/name in its .meta.json. A name reused in
+    the same team is told apart by the spawn prompt; newest wins otherwise."""
+    hits = [
+        t for t, meta in _subagent_metas(project_dir)
+        if meta.get("teamName") == team_name and meta.get("name") == member_name
+    ]
+    exact = [t for t in hits if (_first_lead_message(t) or "").strip() == prompt]
+    pool = exact or hits
+    return max(pool, key=lambda t: t.stat().st_mtime) if pool else None
+
+
+def find_named_subagent_transcript(
+    project_dir: Path, session_ids: list[str], name: str
+) -> tuple[Path, dict] | None:
+    """Transcript + meta of a subagent spawned with `name` (Agent tool, no
+    team) by one of `session_ids`. Newest wins when a name was reused."""
+    hits = [(t, m) for t, m in _subagent_metas(project_dir, session_ids) if m.get("name") == name]
+    return max(hits, key=lambda tm: tm[0].stat().st_mtime) if hits else None
 
 
 def delivered_by_sender(transcript_path: Path | None) -> dict[str, Counter]:

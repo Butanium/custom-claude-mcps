@@ -1,0 +1,7 @@
+{"type": "user", "isSidechain": false, "message": {"role": "user", "content": "go"}, "timestamp": "2026-09-26T01:00:49.000Z"}
+{"type": "assistant", "isSidechain": false, "message": {"role": "assistant", "stop_reason": "end_turn", "content": [{"type": "text", "text": "done"}]}, "timestamp": "2026-09-26T01:00:50.000Z"}
+{"type": "user", "isSidechain": false, "message": {"role": "user", "content": "<local-command-caveat>Caveat: ...</local-command-caveat>"}, "timestamp": "2026-09-26T01:00:51.000Z", "isMeta": true}
+{"type": "user", "isSidechain": false, "message": {"role": "user", "content": "<command-name>/model</command-name>\n<command-message>model</command-message>\n<command-args></command-args>"}, "timestamp": "2026-09-26T01:00:52.000Z"}
+{"type": "user", "isSidechain": false, "message": {"role": "user", "content": "<local-command-stdout>Set model to Opus</local-command-stdout>"}, "timestamp": "2026-09-26T01:00:53.000Z"}
+{"type": "user", "isSidechain": false, "message": {"role": "user", "content": "<bash-input>ls</bash-input>"}, "timestamp": "2026-09-26T01:00:54.000Z"}
+{"type": "user", "isSidechain": false, "message": {"role": "user", "content": "<bash-stdout>a b</bash-stdout><bash-stderr></bash-stderr>"}, "timestamp": "2026-09-26T01:00:55.000Z"}
