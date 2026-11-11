@@ -2,6 +2,19 @@
 
 Append-only. What changed and why; the README says how things work now.
 
+## 2026-11-11 — pdf-viewer: don't put the deny entry in managed settings
+
+**Tried and reverted.** To keep the `deniedMcpServers` entry out of a `settings.json`
+that is shared between machines, I moved it to
+`/etc/claude-code/managed-settings.d/pdf-viewer-shared.json`. The deny worked, but any
+managed settings file makes Claude Code (2.1.321) load its built-in
+`cc-plugin-sec-default`, which seats itself before every user-installed plugin and
+skipped their hooks (`<mod>: its classic.Stop hook was skipped. "cc-plugin-sec-default"
+runs first and sent the event on past it`). Running sessions picked the file up live and
+kept the plugin after the file was removed, until restarted. The entry is back in user
+settings. The CLI's description of `prependPlugins` says setting it in managed settings
+keeps that plugin out; not tested.
+
 ## 2026-11-11 — pdf-viewer: one shared copy of the plugin's PDF server
 
 **Why.** The `pdf-viewer` plugin (synced from claude.ai) starts
