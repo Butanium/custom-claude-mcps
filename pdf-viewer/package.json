@@ -1,0 +1,11 @@
+{
+  "name": "pdf-viewer-shared",
+  "private": true,
+  "type": "module",
+  "description": "Runs @modelcontextprotocol/server-pdf once, over streamable HTTP on loopback, for every Claude Code session",
+  "engines": { "node": ">=20" },
+  "dependencies": {
+    "@modelcontextprotocol/node": "2.0.0",
+    "@modelcontextprotocol/server-pdf": "2.0.4"
+  }
+}

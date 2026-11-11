@@ -2,6 +2,59 @@
 
 Append-only. What changed and why; the README says how things work now.
 
+## 2026-11-11 — pdf-viewer: one shared copy of the plugin's PDF server
+
+**Why.** The `pdf-viewer` plugin (synced from claude.ai) starts
+`npx -y @modelcontextprotocol/server-pdf --stdio` in every session: an `npm`, a `sh` and
+a `node` each time. With 52 sessions that was 156 processes holding 0.9 GB of RAM and
+4.7 GB of swap.
+
+**What changed.** `pdf-viewer/serve.mjs` runs the same package (pinned to 2.0.4) over
+streamable HTTP on loopback; `serve_http.py` gained a `NODE_SERVERS` registry and execs
+`node` for those; `install_http.sh` runs `npm ci` for them. Unit `claude-mcp@pdf`, port
+8875, registered at user scope as `pdf`.
+
+**Is sharing safe? Read from `dist/server.js` of 2.0.4.**
+- Viewer state is safe. The command queue, the poll waiters, the source path and the
+  form-field names are module-level maps keyed by the `randomUUID()` that `display_pdf`
+  returns. Nothing is keyed by connection. The package's own HTTP entry already builds
+  a new MCP server object per request and relies on those maps.
+- The local-file allowlist is not. `allowedLocalDirs` is one process-wide set, and
+  `refreshRoots` does `.clear()` on it before adding the connecting client's roots, so
+  each session would replace the others' directories. Over stateless HTTP the roots
+  request also runs on a server object that never saw `initialize`. So the wrapper
+  never enables client roots and takes a fixed directory list instead. Consequence:
+  every session can open and save PDFs anywhere under those directories, where the
+  stdio copy limited each session to its own working directory.
+- `elicit_form_inputs` is skipped: it checks client capabilities on the per-request
+  server object, which has none.
+
+**Why a wrapper instead of `mcp-pdf-server` without `--stdio`.** That entry calls
+`app.listen(port)` with no host, so it listens on every interface, and enables open
+CORS. The wrapper binds 127.0.0.1, sends no CORS headers and rejects requests whose
+`Host` header is not loopback. It imports `createServer` and `allowedLocalDirs` from the
+package's `main` (`dist/server.js`); `dist/index.js` cannot be imported, it runs `main()`.
+
+**Turning off the plugin's own copy.** Claude Code only merges a plugin server with a
+user-configured one when the command or URL is identical (`Suppressing plugin MCP
+server … duplicates manually-configured` in the CLI), so an HTTP entry never replaces a
+stdio one. Editing the plugin's `.mcp.json` would be undone by the next sync. What works
+is `deniedMcpServers` in user settings, by name (`plugin:pdf-viewer:pdf`) or by command.
+Tested on 2.1.321 with one fresh `claude -p` session per form: the server is absent from
+the session's `mcp_servers` and no process is started. Running sessions on recent
+versions pick the setting up live and stop their copy.
+
+**Verified.** `python3 pdf-viewer/test_shared.py`: two sessions open two viewers, each
+session's `interact` command arrives only at its own viewer's poll, a file outside the
+allowlist is refused, a foreign `Host` is refused. A fresh default-config session lists
+only `mcp__pdf__*` and its `list_pdfs` call reached the unit. Not verified: the viewer
+drawn by the desktop app through the shared server (terminal sessions never draw it;
+the CLI only advertises MCP Apps support when the host sets `CLAUDE_CODE_MCP_APPS_HOST`).
+
+**Gotchas.** The unit's PATH has no nvm directory, so it runs `/usr/bin/node`; `npm` is
+only needed by `install_http.sh`. `list_pdfs` walks every allowed directory up to
+depth 8 until it has 500 PDFs, which is slow with a whole home directory allowed.
+
 ## 2026-09-26 — team-inbox `teammate_status`: working/idle from the transcript
 
 **What changed.** New `turn_state.py`: the last conversation row of a transcript says

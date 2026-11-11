@@ -3,7 +3,7 @@
 # systemd user unit each) and point Claude Code's user-scope config at them.
 # Idempotent: re-run after pulling changes to restart the units with new code.
 #
-# Requires: systemd user session (`systemctl --user`), `uv`, `claude` on PATH.
+# Requires: systemd user session (`systemctl --user`), `uv`, `node` + `npm`, `claude` on PATH.
 # For the units to outlive your login shell: `loginctl enable-linger $USER`.
 set -euo pipefail
 
@@ -13,6 +13,16 @@ UNIT_DIR="$HOME/.config/systemd/user"
 mkdir -p "$UNIT_DIR"
 cp "$HERE/systemd/claude-mcp@.service" "$UNIT_DIR/"
 systemctl --user daemon-reload
+
+# Node-based servers: install their pinned dependencies (needs `npm` on PATH
+# here; the units themselves only need `node`).
+for lock in "$HERE"/*/package-lock.json; do
+  [ -e "$lock" ] || continue
+  dir=$(dirname "$lock")
+  if [ ! -e "$dir/node_modules/.package-lock.json" ] || [ "$lock" -nt "$dir/node_modules/.package-lock.json" ]; then
+    (cd "$dir" && npm ci --no-audit --no-fund)
+  fi
+done
 
 mapfile -t rows < <(python3 "$HERE/serve_http.py" --list)
 for row in "${rows[@]}"; do

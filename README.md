@@ -67,6 +67,25 @@ A [fork](https://github.com/Butanium/paper-search-mcp) of
 (e.g. multi-word arXiv query repair). Pulled in as a git submodule; clone with
 `--recurse-submodules` if you want it.
 
+### `pdf-viewer` — one shared copy of the PDF viewer plugin's server
+
+Not a server of ours: a 90-line wrapper (`pdf-viewer/serve.mjs`) that runs Anthropic's
+[`@modelcontextprotocol/server-pdf`](https://www.npmjs.com/package/@modelcontextprotocol/server-pdf)
+(pinned in `pdf-viewer/package.json`) once for every session. The `pdf-viewer` plugin
+starts it per session as `npx -y @modelcontextprotocol/server-pdf --stdio`, which is
+three processes and about 100 MB each.
+
+- Sessions do not see each other's viewers. All viewer state is keyed by the random
+  `viewUUID` that `display_pdf` returns. `python3 pdf-viewer/test_shared.py` checks this
+  with two fake sessions; run it after bumping the pinned version.
+- Local files: the stdio server lets each session open PDFs under its own working
+  directory. The shared one has a single allowlist for everyone, given as arguments to
+  `serve.mjs` (default: home, the temp dir, `/var/tmp`).
+- `elicit_form_inputs` (asking the user for form values in a dialog) does nothing over
+  this transport.
+- Registered as `pdf`, so tools are `mcp__pdf__display_pdf` etc. The plugin's own copy
+  has to be turned off separately, see below.
+
 ## Installation
 
 Clone wherever you like (`~/.claude/mcp` is where we mount it, as a submodule of the
@@ -97,7 +116,8 @@ systemctl --user status 'claude-mcp@*'
 journalctl --user -u claude-mcp@team-inbox -f
 ```
 
-Ports are fixed in the `SERVERS` registry at the top of `serve_http.py` (8871–8874).
+Ports are fixed in the `SERVERS` and `NODE_SERVERS` registries at the top of
+`serve_http.py` (8871–8875).
 Servers run in stateless mode, so a unit restart never leaves clients holding a dead
 session id. Tool names don't change (`mcp__team-inbox__fetch_unread` etc.), so
 permission rules and hook matchers keep working. Sessions that were already running
@@ -106,3 +126,14 @@ units up when you're logged out. Units don't read your shell profile; host-speci
 environment for them (a `UV_LINK_MODE`, say) goes in `~/.config/claude-mcp.env`. Safe because every server here is stateless with
 respect to the caller: tools take explicit arguments and never read the session's
 environment or cwd — keep it that way if you add one.
+
+`install_http.sh` also registers `pdf` (see `pdf-viewer` above). To stop the plugin from
+starting its own copy next to it, deny that copy in `~/.claude/settings.json`; the
+plugin's skills and commands keep working, they name the tools without a prefix:
+
+```json
+"deniedMcpServers": [
+  { "serverName": "plugin:pdf-viewer:pdf" },
+  { "serverCommand": ["npx", "-y", "@modelcontextprotocol/server-pdf", "--stdio"] }
+]
+```

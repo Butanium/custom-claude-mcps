@@ -16,6 +16,9 @@ Usage (normally via the systemd unit in `systemd/`, see `install_http.sh`):
 The first invocation re-execs itself through `uv run --project <dir>` so the
 server runs inside its own venv; the registry below maps each server name to
 its project directory, importable module, and loopback port.
+
+`NODE_SERVERS` are third-party Node servers wrapped by a script in this repo
+(same sharing argument, checked per server); those are exec'd with `node`.
 """
 
 from __future__ import annotations
@@ -36,23 +39,41 @@ SERVERS: dict[str, tuple[str, str, int]] = {
     "paper-search": ("paper-search-mcp", "paper_search_mcp.server", 8874),
 }
 
+# name -> (project dir under HERE, script run with node, port). The script takes
+# --host/--port; `npm ci` in the project dir is install_http.sh's job.
+NODE_SERVERS: dict[str, tuple[str, str, int]] = {
+    "pdf": ("pdf-viewer", "serve.mjs", 8875),
+}
+
 STAGE_ENV = "CUSTOM_CLAUDE_MCPS_IN_VENV"
+
+
+def exec_node_server(name: str, host: str, port: int | None) -> None:
+    project_dir, script, default_port = NODE_SERVERS[name]
+    project_path = HERE / project_dir
+    if not (project_path / "node_modules").is_dir():
+        sys.exit(f"[serve_http] {project_path}/node_modules is missing: run `npm ci` there (install_http.sh does)")
+    node = os.environ.get("NODE", "node")
+    cmd = [node, str(project_path / script), "--host", host, "--port", str(port or default_port)]
+    os.execvp(cmd[0], cmd)
 
 
 def main() -> None:
     ap = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
-    ap.add_argument("name", nargs="?", choices=sorted(SERVERS))
+    ap.add_argument("name", nargs="?", choices=sorted({**SERVERS, **NODE_SERVERS}))
     ap.add_argument("--port", type=int, help="override the registry port")
     ap.add_argument("--host", default="127.0.0.1")
     ap.add_argument("--list", action="store_true", help="print '<name> <port>' per line")
     args = ap.parse_args()
 
     if args.list:
-        for name, (_, _, port) in SERVERS.items():
+        for name, (_, _, port) in {**SERVERS, **NODE_SERVERS}.items():
             print(name, port)
         return
     if args.name is None:
         ap.error("name is required unless --list")
+    if args.name in NODE_SERVERS:
+        exec_node_server(args.name, args.host, args.port)
 
     project_dir, module_name, port = SERVERS[args.name]
     project_path = HERE / project_dir
