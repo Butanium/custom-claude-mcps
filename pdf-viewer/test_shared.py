@@ -49,10 +49,11 @@ class Client:
         self._id = 0
 
     def call(self, tool: str, arguments: dict, timeout: float = 40.0, host: str | None = None) -> dict:
+        return self.request("tools/call", {"name": tool, "arguments": arguments}, timeout, host)
+
+    def request(self, method: str, params: dict, timeout: float = 40.0, host: str | None = None) -> dict:
         self._id += 1
-        body = json.dumps(
-            {"jsonrpc": "2.0", "id": self._id, "method": "tools/call", "params": {"name": tool, "arguments": arguments}}
-        ).encode()
+        body = json.dumps({"jsonrpc": "2.0", "id": self._id, "method": method, "params": params}).encode()
         headers = {"content-type": "application/json", "accept": "application/json, text/event-stream"}
         if host:
             headers["Host"] = host
@@ -105,6 +106,19 @@ def run_checks(port: int, allowed: Path, outside: Path) -> None:
     uuid_b = b.call("display_pdf", {"url": str(allowed / "b.pdf")})["structuredContent"]["viewUUID"]
     assert uuid_a != uuid_b
     print("ok  two sessions get two viewers")
+
+    # What the viewer iframe does before it ever polls: load its own page, then the PDF bytes.
+    tools = {t["name"]: t for t in a.request("tools/list", {})["tools"]}
+    ui_uri = tools["display_pdf"]["_meta"]["ui"]["resourceUri"]
+    page = a.request("resources/read", {"uri": ui_uri})["contents"][0]
+    assert len(page["text"]) > 1_000_000 and "mcp-app" in page["mimeType"], (page["mimeType"], len(page["text"]))
+    chunk = a.call("read_pdf_bytes", {"url": str(allowed / "a.pdf")})["structuredContent"]
+    assert chunk["totalBytes"] == len(minimal_pdf()) and not chunk["hasMore"], chunk.keys()
+    print("ok  the viewer page and the PDF bytes are served")
+
+    listing = a.call("list_pdfs", {})["structuredContent"]
+    assert listing == {"localFiles": [], "allowedDirectories": [str(allowed.resolve())], "truncated": False}, listing
+    print("ok  list_pdfs names the allowed directories without listing files")
 
     polls: dict[str, list] = {}
 

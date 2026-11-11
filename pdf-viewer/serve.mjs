@@ -41,6 +41,38 @@ for (const dir of dirs.length > 0 ? dirs : defaults) {
   }
 }
 
+// The package's list_pdfs walks every allowed directory and returns up to 500
+// paths. With one session's project as the only root that is a useful listing;
+// with a whole home directory shared by every session it is 100 KB of other
+// projects' files. Replace it with the directory list alone.
+function makeServer() {
+  const server = createServer({ enableInteract: true, useClientRoots: false });
+  const listPdfs = server._registeredTools?.list_pdfs;
+  if (!listPdfs) throw new Error("server-pdf no longer registers list_pdfs the way serve.mjs expects");
+  listPdfs.update({
+    description:
+      "List the local directories PDFs can be displayed from. Does not list files: this server is shared by every session, so find the PDF with your own file tools and pass its absolute path to display_pdf.",
+    callback: async () => {
+      const allowedDirectories = [...allowedLocalDirs];
+      return {
+        content: [
+          {
+            type: "text",
+            text:
+              `Any PDF under these directories can be displayed (pass its absolute path to display_pdf):\n` +
+              allowedDirectories.map((d) => `- ${d}`).join("\n") +
+              `\n\nFiles are not listed here; search for *.pdf in your project with your own file tools.` +
+              `\nAny remote PDF accessible via HTTPS can also be loaded.`,
+          },
+        ],
+        structuredContent: { localFiles: [], allowedDirectories, truncated: false },
+      };
+    },
+  });
+  return server;
+}
+makeServer(); // fail at startup, not on the first request, if the package changed shape
+
 // A browser page cannot reach this server by DNS rebinding: the Host header
 // must name loopback, and no CORS headers are ever sent.
 const allowedHosts = new Set(
@@ -60,7 +92,7 @@ const httpServer = http.createServer(async (req, res) => {
   // request. Everything a viewer needs between requests (command queue, poll
   // waiters, source path) lives in the package's module-level maps, keyed by
   // the random viewUUID that display_pdf returns.
-  const server = createServer({ enableInteract: true, useClientRoots: false });
+  const server = makeServer();
   const transport = new NodeStreamableHTTPServerTransport({
     sessionIdGenerator: undefined,
   });

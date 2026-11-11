@@ -69,7 +69,7 @@ A [fork](https://github.com/Butanium/paper-search-mcp) of
 
 ### `pdf-viewer` — one shared copy of the PDF viewer plugin's server
 
-Not a server of ours: a 90-line wrapper (`pdf-viewer/serve.mjs`) that runs Anthropic's
+Not a server of ours: a small wrapper (`pdf-viewer/serve.mjs`) that runs Anthropic's
 [`@modelcontextprotocol/server-pdf`](https://www.npmjs.com/package/@modelcontextprotocol/server-pdf)
 (pinned in `pdf-viewer/package.json`) once for every session. The `pdf-viewer` plugin
 starts it per session as `npx -y @modelcontextprotocol/server-pdf --stdio`, which is
@@ -81,6 +81,8 @@ three processes and about 100 MB each.
 - Local files: the stdio server lets each session open PDFs under its own working
   directory. The shared one has a single allowlist for everyone, given as arguments to
   `serve.mjs` (default: home, the temp dir, `/var/tmp`).
+- `list_pdfs` names the allowed directories instead of listing up to 500 files from
+  them; the model finds the PDF with its own file tools.
 - `elicit_form_inputs` (asking the user for form values in a dialog) does nothing over
   this transport.
 - Registered as `pdf`, so tools are `mcp__pdf__display_pdf` etc. The plugin's own copy

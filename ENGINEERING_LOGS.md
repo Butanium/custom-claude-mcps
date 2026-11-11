@@ -24,8 +24,9 @@ streamable HTTP on loopback; `serve_http.py` gained a `NODE_SERVERS` registry an
   each session would replace the others' directories. Over stateless HTTP the roots
   request also runs on a server object that never saw `initialize`. So the wrapper
   never enables client roots and takes a fixed directory list instead. Consequence:
-  every session can open and save PDFs anywhere under those directories, where the
-  stdio copy limited each session to its own working directory.
+  any local process that can reach loopback (so every session) can open and save PDFs
+  anywhere under those directories, where the stdio copy limited each session to its
+  own working directory. Same exposure as `big-read`.
 - `elicit_form_inputs` is skipped: it checks client capabilities on the per-request
   server object, which has none.
 
@@ -45,15 +46,24 @@ the session's `mcp_servers` and no process is started. Running sessions on recen
 versions pick the setting up live and stop their copy.
 
 **Verified.** `python3 pdf-viewer/test_shared.py`: two sessions open two viewers, each
-session's `interact` command arrives only at its own viewer's poll, a file outside the
-allowlist is refused, a foreign `Host` is refused. A fresh default-config session lists
+session's `interact` command arrives only at its own viewer's poll, the viewer page
+(`resources/read` of the `ui://` resource) and `read_pdf_bytes` are served, a file
+outside the allowlist is refused, a foreign `Host` is refused. A fresh default-config session lists
 only `mcp__pdf__*` and its `list_pdfs` call reached the unit. Not verified: the viewer
 drawn by the desktop app through the shared server (terminal sessions never draw it;
 the CLI only advertises MCP Apps support when the host sets `CLAUDE_CODE_MCP_APPS_HOST`).
 
+**`list_pdfs` is replaced.** The package's version walks every allowed directory and
+returns up to 500 paths. With a home directory allowed that was a 107 KB result made of
+other projects' files, and the plugin's `/open` command tells the model to call it. The
+wrapper swaps the handler (through the tool's own `update()`) for one that names the
+allowed directories and tells the model to find the file itself. `serve.mjs` builds one
+server at startup so a package version that drops `_registeredTools.list_pdfs` fails
+there, not on a request.
+
 **Gotchas.** The unit's PATH has no nvm directory, so it runs `/usr/bin/node`; `npm` is
-only needed by `install_http.sh`. `list_pdfs` walks every allowed directory up to
-depth 8 until it has 500 PDFs, which is slow with a whole home directory allowed.
+only needed by `install_http.sh`. The deny entry lives in `settings.json`: on a machine
+that shares that file but has no `claude-mcp@pdf` unit, sessions get no PDF tools.
 
 ## 2026-09-26 — team-inbox `teammate_status`: working/idle from the transcript
 
